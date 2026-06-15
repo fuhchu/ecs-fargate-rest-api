@@ -1,0 +1,32 @@
+# Everything listed here is excluded from the "build context" — the set of
+# files Docker sends to the build. A smaller context means faster builds and,
+# crucially, prevents secrets or junk from accidentally landing in the image.
+
+# Local virtual environment (we rebuild deps inside the image)
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Tests and dev-only requirements (the image only needs to RUN, not test)
+tests/
+requirements-dev.txt
+conftest.py
+
+# Version control and project metadata
+.git/
+.gitignore
+.dockerignore
+
+# Docs and infra — not needed at runtime
+*.md
+.github/
+infra/
+
+# Secrets / environment files (must never enter an image)
+.env
+*.env.local
