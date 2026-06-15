@@ -1,0 +1,7 @@
+# Development/test dependencies — what we need to TEST the app, but that
+# should NOT ship in the production image (smaller image = faster, safer).
+# `-r requirements.txt` pulls in the runtime deps too, so one install
+# command gives a complete local environment.
+-r requirements.txt
+pytest==9.1.0
+httpx==0.28.1
