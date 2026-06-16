@@ -15,7 +15,8 @@ Infrastructure is defined in **Terraform**; every push to `main` runs a
 GitHub  →  GitHub Actions (CI/CD)  →  Amazon ECR  →  ECS Fargate  →  ALB  →  users
 ```
 
-_(Diagram and full write-up added as the build progresses.)_
+📖 **Full deep-dive:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — end-to-end
+request flow, every layer explained, diagrams, cost breakdown, and design tradeoffs.
 
 ## Tech stack
 
