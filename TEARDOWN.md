@@ -45,3 +45,8 @@ Run `cd infra && terraform destroy` to remove ALL of the below in one command.
 - **ECS cluster/service/tasks** (Milestone 4c): cluster, task definition,
   service running 2 Fargate tasks.
   - 💰 2 Fargate tasks bill ~$0.60/day. Included in `terraform destroy`.
+- **GitHub OIDC provider + CI role** (Milestone 5a): IAM OIDC identity provider
+  for GitHub, the `items-api-github-actions` role + its policy. No standing cost.
+  - ⚠️ The OIDC *provider* is account-global. If you ever add OTHER repos that
+    use GitHub OIDC in this account, don't let `terraform destroy` remove the
+    provider out from under them.

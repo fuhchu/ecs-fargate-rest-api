@@ -10,5 +10,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    # Used to fetch GitHub's OIDC certificate fingerprint dynamically, so we
+    # never hardcode a thumbprint that could change.
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 }

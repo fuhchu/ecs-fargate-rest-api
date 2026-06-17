@@ -43,3 +43,9 @@ variable "image_tag" {
   type        = string
   default     = "0.1.0"
 }
+
+variable "github_repository" {
+  description = "GitHub repo (owner/name) permitted to assume the CI role via OIDC."
+  type        = string
+  default     = "fuhchu/ecs-fargate-rest-api"
+}

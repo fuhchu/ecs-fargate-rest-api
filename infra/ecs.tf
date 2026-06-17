@@ -99,5 +99,14 @@ resource "aws_ecs_service" "app" {
   # The service registers into the target group, so the listener must exist first.
   depends_on = [aws_lb_listener.http]
 
+  lifecycle {
+    # The CI/CD pipeline (Milestone 5) registers a new task-definition revision
+    # on every deploy and points the service at it. Ignoring task_definition
+    # here means a later `terraform apply` won't roll the service back to the
+    # revision Terraform created. The boundary: Terraform owns the
+    # infrastructure shape; the pipeline owns which image version is deployed.
+    ignore_changes = [task_definition]
+  }
+
   tags = { Name = "${var.name}-service" }
 }

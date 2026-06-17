@@ -1,0 +1,112 @@
+name: CI/CD — test, build, deploy
+
+# Run on every push to main, and allow manual runs from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Don't let two deploys run at once and race each other.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+# Values reused across steps. Change these here if names ever change.
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: items-api
+  ECS_CLUSTER: items-api-cluster
+  ECS_SERVICE: items-api-service
+  TASK_FAMILY: items-api
+  CONTAINER_NAME: items-api
+  ROLE_ARN: arn:aws:iam::445481011516:role/items-api-github-actions
+
+jobs:
+  # ---- Gate: the test suite must pass before anything is built or deployed ----
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -v
+
+  # ---- Build the image and roll the ECS service to it ----
+  deploy:
+    name: Build & Deploy
+    needs: test                       # only runs if 'test' succeeded
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    # OIDC: 'id-token: write' lets the job request the signed token AWS trusts.
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exchange GitHub's OIDC token for temporary AWS credentials. No secrets.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Tag the image with the exact commit SHA — every deploy is traceable.
+      - name: Build and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA}"
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      # Take the CURRENT task definition, swap in the new image, and register a
+      # new revision. We strip the read-only fields that register won't accept.
+      - name: Register new task definition revision
+        id: taskdef
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition "$TASK_FAMILY" --query taskDefinition)
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "$IMAGE_URI" '
+            .containerDefinitions[0].image = $IMAGE
+            | del(
+                .taskDefinitionArn, .revision, .status, .requiresAttributes,
+                .compatibilities, .registeredAt, .registeredBy
+              )
+          ')
+          echo "$NEW_TASK_DEF" > new-task-def.json
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+
+      # Point the service at the new revision and block until it's healthy.
+      # If the new tasks never stabilize, this step fails (and the service's
+      # deployment circuit breaker rolls back automatically).
+      - name: Deploy to ECS and wait for stability
+        env:
+          TASKDEF_ARN: ${{ steps.taskdef.outputs.arn }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$TASKDEF_ARN"
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          echo "✅ Deployment complete: $TASKDEF_ARN"
